@@ -1,0 +1,12 @@
+name: "Dotenv Vault Diff"
+description: "Check and comment on dotenv-vault changes in pull requests"
+inputs:
+  github-token:
+    description: "GitHub token"
+    required: true
+  dotenv-me:
+    description: "DOTENV_ME secret"
+    required: true
+runs:
+  using: "node20"
+  main: "dist/index.js"
