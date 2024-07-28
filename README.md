@@ -37,3 +37,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License.
+
+## Running this locally
+
+PR_NUMBER=13 GITHUB_REPOSITORY="High-Country-Dev/farmers" GITHUB_BASE_REF=dev DOTENV_ME=me_x GITHUB_TOKEN=ghp_x node ../dotenv-vault-diff/dist/index.js
