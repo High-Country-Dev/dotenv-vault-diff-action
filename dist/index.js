@@ -31859,45 +31859,123 @@ const github = __importStar(__nccwpck_require__(3695));
 const child_process_1 = __nccwpck_require__(2081);
 const util_1 = __nccwpck_require__(3837);
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
+const STAGES = ["CI", "DEVELOPMENT", "STAGING", "PRODUCTION"];
 async function run() {
+    var _a, _b;
     try {
-        const githubToken = core.getInput("github-token", { required: true });
-        const dotenvMe = core.getInput("dotenv-me", { required: true });
+        const githubToken = (_a = process.env.GITHUB_TOKEN) !== null && _a !== void 0 ? _a : core.getInput("github-token", { required: true });
+        const dotenvMe = (_b = process.env.DOTENV_ME) !== null && _b !== void 0 ? _b : core.getInput("dotenv-me", { required: true });
+        const prNumber = process.env.PR_NUMBER; // or null
         const octokit = github.getOctokit(githubToken);
         const context = github.context;
+        const repo = context.repo;
+        console.log("repo:", repo);
+        let currentPR;
+        if (context.payload.pull_request) {
+            currentPR = context.payload.pull_request;
+        }
+        else if (typeof prNumber === "string") {
+            const { data: pr } = await octokit.rest.pulls.get({
+                ...repo,
+                pull_number: parseInt(prNumber, 10),
+            });
+            currentPR = pr;
+        }
+        else {
+            core.setFailed("Could not determine pull request number. Exiting.");
+            return;
+        }
+        console.log("currentPR:", currentPR.number);
         if (!dotenvMe) {
             core.setFailed("DOTENV_ME is not set. Exiting.");
             return;
         }
         process.env.DOTENV_ME = dotenvMe;
-        async function getLatestVersion(stage) {
+        async function getAllVersions(stage) {
             try {
-                const { stdout } = await execAsync(`dotenv-vault versions ${stage} | awk 'NR==3 { printf "%5s %s", $1, $2 }'`);
-                return stdout.trim();
+                const { stdout } = await execAsync(`npx dotenv-vault versions ${stage}`);
+                const versionLines = stdout.split("\n").slice(2); // Skip the header lines
+                const allVersions = versionLines
+                    .filter((line) => line.trim() !== "")
+                    .map((line) => {
+                    var _a, _b, _c;
+                    const parts = line.trim().split(/\s{2,}/); // Split by two or more spaces
+                    const userTime = parts.pop();
+                    const [user, ...timeParts] = (_a = userTime === null || userTime === void 0 ? void 0 : userTime.split(" ")) !== null && _a !== void 0 ? _a : [];
+                    const time = timeParts.join(" ");
+                    const version = (_c = (_b = parts.splice(0, 1)) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.replace("v", ""); // Get the version number
+                    const fields = parts.length ? parts[0] : "N/A"; // Join remaining fields as a single string
+                    return {
+                        version,
+                        fields,
+                        user,
+                        time,
+                    };
+                })
+                    .filter((version) => !!version.version);
+                // console.log(`Versions for ${stage}:`, allVersions);
+                return allVersions;
             }
             catch (error) {
-                console.error(`Error getting latest version for ${stage}:`, error);
-                return "";
+                console.error(`Error getting versions for ${stage}:`, error);
+                return [];
             }
+        }
+        async function getChangedStageVersions() {
+            const { stdout: diffOutput } = await execAsync(`git diff origin/${process.env.GITHUB_BASE_REF} -- .env.vault`);
+            const changedStages = STAGES.filter((stage) => diffOutput.includes(`+DOTENV_VAULT_${stage}`) ||
+                diffOutput.includes(`-DOTENV_VAULT_${stage}`));
+            if (changedStages.length === 0) {
+                return [];
+            }
+            const stageVersions = changedStages.map((stage) => {
+                const addedRegex = new RegExp(`\\+DOTENV_VAULT_${stage}_VERSION=(\\d+)`, "g");
+                const removedRegex = new RegExp(`\\-DOTENV_VAULT_${stage}_VERSION=(\\d+)`, "g");
+                let match;
+                const addedVersions = [];
+                while ((match = addedRegex.exec(diffOutput)) !== null) {
+                    addedVersions.push(parseInt(match[1]));
+                }
+                const removedVersions = [];
+                while ((match = removedRegex.exec(diffOutput)) !== null) {
+                    removedVersions.push(parseInt(match[1]));
+                }
+                const minRemovedVersion = Math.min(...removedVersions);
+                const maxAddedVersion = Math.max(...addedVersions);
+                return {
+                    stage,
+                    versions: Array.from({ length: maxAddedVersion - minRemovedVersion }, (_, i) => minRemovedVersion + i + 1),
+                };
+            });
+            return stageVersions;
         }
         async function generateCommentBody() {
-            const { stdout: diffOutput } = await execAsync(`git diff origin/${process.env.GITHUB_BASE_REF} -- .env.vault`);
-            const stages = ["CI", "DEVELOPMENT", "STAGING", "PRODUCTION"];
-            const changedStages = stages.filter((stage) => diffOutput.includes(`+DOTENV_VAULT_${stage}`));
-            if (changedStages.length === 0) {
-                return "Dotenv-vault Diff\n\nNo changes detected in .env.vault file.";
-            }
-            const versionOutputs = await Promise.all(changedStages.map(async (stage) => {
-                const version = await getLatestVersion(stage.toLowerCase());
-                return version ? `\n${stage}:\n${version}` : "";
+            const changedStageVersions = await getChangedStageVersions();
+            console.log("Changed stage versions:", changedStageVersions);
+            const versionOutputs = await Promise.all(STAGES.map(async (stage) => {
+                const changedVersion = changedStageVersions.find((changedStage) => changedStage.stage === stage);
+                if (!changedVersion) {
+                    return `${stage}: No changes`;
+                }
+                const versions = await getAllVersions(stage);
+                console.log(`Versions for ${stage}:`, versions.map((v) => v.version));
+                const changedVersions = versions.filter((version) => changedVersion.versions.includes(parseInt(version.version, 10)));
+                if (changedVersions.length === 0) {
+                    return `${stage}: No versions changed`;
+                }
+                return changedVersions
+                    .map((cv) => `${stage} (${cv.version}): \`${cv.fields}\``)
+                    .join("\n");
             }));
-            return `Dotenv-vault Diff\n${versionOutputs.join("\n")}`.trim();
+            return `Dotenv-vault Diff\n${versionOutputs.join("\n")}`;
         }
         const commentBody = await generateCommentBody();
+        console.log("Comment body:", commentBody);
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
-            issue_number: context.issue.number,
+            issue_number: currentPR.number,
         });
+        console.log("Comments:", comments.length);
         const existingComment = comments.find((comment) => {
             var _a, _b;
             return ((_a = comment.user) === null || _a === void 0 ? void 0 : _a.login) === "github-actions[bot]" &&
