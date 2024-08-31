@@ -24,10 +24,8 @@ const STAGES = ["CI", "DEVELOPMENT", "STAGING", "PRODUCTION"];
 async function run(): Promise<void> {
   try {
     const githubToken =
-      process.env.GITHUB_TOKEN ??
-      core.getInput("github-token", { required: true });
-    const dotenvMe =
-      process.env.DOTENV_ME ?? core.getInput("dotenv-me", { required: true });
+      process.env.GITHUB_TOKEN ?? core.getInput("github-token");
+    const dotenvMe = process.env.DOTENV_ME ?? core.getInput("dotenv-me");
 
     if (!githubToken) {
       core.setFailed("GITHUB_TOKEN is not set. Exiting.");

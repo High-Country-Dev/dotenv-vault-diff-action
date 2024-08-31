@@ -31863,8 +31863,8 @@ const STAGES = ["CI", "DEVELOPMENT", "STAGING", "PRODUCTION"];
 async function run() {
     var _a, _b;
     try {
-        const githubToken = (_a = process.env.GITHUB_TOKEN) !== null && _a !== void 0 ? _a : core.getInput("github-token", { required: true });
-        const dotenvMe = (_b = process.env.DOTENV_ME) !== null && _b !== void 0 ? _b : core.getInput("dotenv-me", { required: true });
+        const githubToken = (_a = process.env.GITHUB_TOKEN) !== null && _a !== void 0 ? _a : core.getInput("github-token");
+        const dotenvMe = (_b = process.env.DOTENV_ME) !== null && _b !== void 0 ? _b : core.getInput("dotenv-me");
         if (!githubToken) {
             core.setFailed("GITHUB_TOKEN is not set. Exiting.");
             return;
