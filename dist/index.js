@@ -31865,6 +31865,14 @@ async function run() {
     try {
         const githubToken = (_a = process.env.GITHUB_TOKEN) !== null && _a !== void 0 ? _a : core.getInput("github-token", { required: true });
         const dotenvMe = (_b = process.env.DOTENV_ME) !== null && _b !== void 0 ? _b : core.getInput("dotenv-me", { required: true });
+        if (!githubToken) {
+            core.setFailed("GITHUB_TOKEN is not set. Exiting.");
+            return;
+        }
+        if (!dotenvMe) {
+            core.setFailed("DOTENV_ME is not set. Exiting.");
+            return;
+        }
         const prNumber = process.env.PR_NUMBER; // or null
         const octokit = github.getOctokit(githubToken);
         const context = github.context;

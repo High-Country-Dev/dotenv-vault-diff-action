@@ -28,6 +28,17 @@ async function run(): Promise<void> {
       core.getInput("github-token", { required: true });
     const dotenvMe =
       process.env.DOTENV_ME ?? core.getInput("dotenv-me", { required: true });
+
+    if (!githubToken) {
+      core.setFailed("GITHUB_TOKEN is not set. Exiting.");
+      return;
+    }
+
+    if (!dotenvMe) {
+      core.setFailed("DOTENV_ME is not set. Exiting.");
+      return;
+    }
+
     const prNumber = process.env.PR_NUMBER; // or null
 
     const octokit = github.getOctokit(githubToken);
